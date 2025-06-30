@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <title>পার্সোনাল ফাইন্যান্স ট্র্যাকার</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Firebase & Chart.js -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <style>
+    body { font-family: 'Noto Sans Bengali', sans-serif; max-width: 1100px; margin: auto; background: #f5f5f5; padding: 12px;}
+    h2 {text-align:center; margin:18px 0 5px 0;}
+    .tab-nav { display:flex; gap:10px; margin:22px 0 15px 0; justify-content:center;}
+    .tab-nav button { background:#ecebff; border:none; border-radius:8px; padding:10px 28px; font-size:1.08em; color:#6c63ff; font-weight:600; cursor:pointer; transition:.18s;}
+    .tab-nav button.active, .tab-nav button:hover { background:#6c63ff; color:#fff;}
+    #financeTab, #adminTab, #settingsTab { display:none; }
+    #financeTab.active, #adminTab.active, #settingsTab.active { display:block; }
+    .success { color: #23b46d;}
+    #userStatus { color: #e43b44; min-height: 24px;}
+    .summary { margin: 16px 0 12px 0; background: #c8e6c9; padding: 10px;}
+    #loginSection input, #loginSection button { margin: 5px; padding: 6px; }
+    #loginSection { background: #e3f2fd; padding: 13px; margin-bottom: 11px; border-radius:9px;}
+    #appSection { display: none; }
+    #emailError { color: red; display: none; margin-left: 5px; }
+    .finance-table-tools { margin: 10px 0 9px 0; display: flex; gap: 13px; flex-wrap: wrap; align-items: center;}
+    .finance-table-section { overflow-x: auto;}
+    #financeBody tr.editing td { background: #f7efd3 !important;}
+    #financeBody td .edit-btn, #financeBody td .save-btn, #financeBody td .cancel-btn {
+      font-size: .97em; padding: 4px 9px; margin:2px; border-radius:5px; border:none; cursor:pointer;
+    }
+    #financeBody td .edit-btn { background: #ecebff; color: #6c63ff; }
+    #financeBody td .edit-btn:hover { background: #c8e6c9; color: #1ab048;}
+    #financeBody td .save-btn { background: #23c483; color: #fff;}
+    #financeBody td .cancel-btn { background: #ff6584; color: #fff;}
+    #financeBody td input, #financeBody td select {
+      width: 80px; font-size:.95em; padding:3px 7px; border-radius:4px; border:1px solid #bbb;
+    }
+    .no-data { color: #888; text-align: center; padding: 18px; font-size: 1.07em;}
+    .pagination { text-align:center; margin:7px 0;}
+    .pgn-btn { background:#ecebff; color:#6c63ff; border:none; border-radius:7px; padding:6px 13px; font-size:1.07em; margin:0 2px; cursor:pointer;}
+    .pgn-btn.active, .pgn-btn:hover { background:#6c63ff; color:#fff;}
+    .admin-panel-title { font-size: 1.2em; font-weight: 700; color: #6c63ff; border-left: 4px solid #6c63ff; padding-left: 11px;}
+    .user-table-section { overflow-x: auto;}
+    .user-table-section table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 1.07em; min-width: 700px; background: #fff;}
+    .user-table-section th, .user-table-section td { padding: 8px 8px; border-bottom: 1px solid #e1e4ea;}
+    .status-badge.active { background: #e9fff4; color: #23c483; padding:2px 10px; border-radius:7px;}
+    .status-badge.inactive { background: #ffeaea; color: #ff6584; padding:2px 10px; border-radius:7px;}
+    .edit-btn, .delete-btn, .showpass-btn, .reset-btn, .status-btn { background: #ecebff; color: #6c63ff; border: none; border-radius: 8px; padding: 4px 9px; font-size: 1.03em; cursor: pointer; margin:1px;}
+    .delete-btn { background: #ffeaea; color: #ff6584;}
+    .delete-btn:hover { background: #ff6584; color: #fff;}
+    .notif-bar { display:none; position:fixed; top:18px; left:50%; transform:translateX(-50%); z-index:9999; padding:10px 38px; border-radius:8px; font-size:1.06em; font-weight:600;}
+    .notif-bar.success { background:#e9fff4; color:#23c483;}
+    .notif-bar.error { background:#ffeaea; color:#ff6584;}
+    .dark { background: #1a1a2f; color: #f3f3f3;}
+    .dark .summary, .dark #loginSection, .dark .finance-table-section table, .dark .user-table-section table { background: #232334 !important; color:#f3f3f3;}
+    .dark .tab-nav button { background:#232334; color: #ffd86e;}
+    .dark .tab-nav button.active, .dark .tab-nav button:hover { background:#ffd86e; color:#232334;}
+    .theme-btn { position:fixed; bottom:20px; right:20px; background:#ecebff; color:#6c63ff; border:none; border-radius:50%; font-size:1.5em; padding:13px; cursor:pointer; box-shadow:0 2px 15px #0002;}
+    .theme-btn.active { background:#232334; color:#ffd86e;}
+    @media (max-width: 700px) {
+      body {padding:7px;}
+      #financeBody td input, #financeBody td select {width:60px;}
+      .user-table-section table { min-width:420px;}
+    }
+  </style>
+</head>
+<body>
+<h2>পার্সোনাল ফাইন্যান্স ট্র্যাকার</h2>
+<div class="tab-nav">
+  <button id="tabFinance" class="active" onclick="showTab('finance')"><i class="fa-solid fa-wallet"></i> ফাইন্যান্স</button>
+  <button id="tabAdminPanel" style="display:none;" onclick="showTab('admin')"><i class="fa-solid fa-users-gear"></i> অ্যাডমিন</button>
+  <button id="tabSettings" onclick="showTab('settings')"><i class="fa-solid fa-gear"></i> সেটিংস</button>
+</div>
+<!-- ==== Finance Tab ==== -->
+<div id="financeTab" class="active">
+  <div id="userStatus"></div>
+  <div id="loginSection">
+    <h3>🔐 লগইন / রেজিস্টার</h3>
+    <input type="email" id="signupEmail" required placeholder="নতুন ইমেইল">
+    <small id="emailError"></small>
+    <input type="password" id="signupPassword" placeholder="পাসওয়ার্ড">
+    <button id="signupBtn">সাইন আপ</button><br>
+    <input type="email" id="loginEmail" required placeholder="ইমেইল">
+    <input type="password" id="loginPassword" placeholder="পাসওয়ার্ড">
+    <button id="loginBtn">লগইন</button>
+    <button id="googleLoginBtn" style="background:#eee; color:#dd4b39; border-radius:7px; border:none; font-weight:600; margin-left:7px;"><i class="fa-brands fa-google"></i> গুগল লগইন</button>
+    <br>
+    <input type="email" id="recoveryEmail" placeholder="পাসওয়ার্ড রিকভারি ইমেইল">
+    <button id="recoverBtn">পাসওয়ার্ড রিসেট</button><br>
+    <input type="text" id="adminPin" placeholder="Admin PIN">
+    <button id="adminLoginBtn">🎯 Admin Login</button>
+  </div>
+  <div id="appSection" style="display:none;">
+    <div>
+      <span id="multiLangWrap" style="float:right;">
+        <select id="langSelect" style="padding:2px 9px;">
+          <option value="bn">বাংলা</option>
+          <option value="en">English</option>
+        </select>
+      </span>
+      <p>👤 ইউজার: <span id="loggedUser"></span> <button id="logoutBtn">লগআউট</button></p>
+    </div>
+    <div class="summary">
+      <strong>Income:</strong> ৳<span id="totalIncome">0</span> |
+      <strong>Expenses:</strong> ৳<span id="totalExpenses">0</span> |
+      <strong>Savings:</strong> ৳<span id="savings">0</span>
+    </div>
+    <div style="margin-bottom:14px;">
+      <h4>নতুন তথ্য যুক্ত করুন:</h4>
+      <input type="date" id="dateInput">
+      <input type="text" id="descInput" placeholder="বিবরণ">
+      <input type="number" id="amtInput" placeholder="পরিমাণ">
+      <select id="typeInput">
+        <option>Income</option>
+        <option>Expense</option>
+      </select>
+      <select id="accountInput">
+        <option value="main">মূল একাউন্ট</option>
+        <option value="bkash">বিকাশ</option>
+        <option value="nagad">নগদ</option>
+        <option value="bank">Bank</option>
+      </select>
+      <select id="categoryInput"></select>
+      <select id="subCatInput"></select>
+      <input type="text" id="customCatInput" placeholder="Custom ক্যাটাগরি" style="display:none;">
+      <textarea id="noteInput" placeholder="নোট/লোকেশন"></textarea>
+      <label><input type="checkbox" id="recurringInput"> Recurring (repeat)</label>
+      <button id="addDataBtn">➕ যোগ করুন</button>
+<button id="downloadPdfBtn">ডাউনলোড PDF</button>
+  <table id="financeTable">
+    <thead>
+      <tr>
+        <th>তারিখ</th>
+        <th>বিবরণ</th>
+        <th>টাইপ</th>
+        <th>পরিমাণ (৳)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <button id="exportBtn">⬇️ ডাউনলোড CSV</button>
+    </div>
+    <div class="finance-table-tools">
+      <input type="text" id="entrySearch" placeholder="টেবিল সার্চ করুন..." style="padding:5px 11px;">
+      <select id="sortSelect">
+        <option value="">Sort By</option>
+        <option value="date-desc">Date ⬇️</option>
+        <option value="date-asc">Date ⬆️</option>
+        <option value="amount-desc">Amount ⬇️</option>
+        <option value="amount-asc">Amount ⬆️</option>
+        <option value="income">Only Income</option>
+        <option value="expense">Only Expense</option>
+      </select>
+      <select id="rangeSelect">
+        <option value="all">সব সময়</option>
+        <option value="today">আজ</option>
+        <option value="week">এই সপ্তাহ</option>
+        <option value="month">এই মাস</option>
+        <option value="custom">Custom</option>
+      </select>
+      <input type="date" id="customStart" style="display:none;">
+      <input type="date" id="customEnd" style="display:none;">
+    </div>
+    <div class="finance-table-section">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>তারিখ</th>
+            <th>বিবরণ</th>
+            <th>পরিমাণ</th>
+            <th>ধরন</th>
+            <th>অ্যাকাউন্ট</th>
+            <th>ক্যাটাগরি</th>
+            <th>সাব-ক্যাটাগরি</th>
+            <th>নোট</th>
+            <th>Recurring</th>
+            <th>একশন</th>
+          </tr>
+        </thead>
+        <tbody id="financeBody"></tbody>
+      </table>
+      <div id="financeNoData" class="no-data" style="display:none;">কোনো এন্ট্রি নেই</div>
+      <div id="financePagination" class="pagination"></div>
+    </div>
+    <div>
+      <canvas id="chartCanvas" height="200"></canvas>
+      <canvas id="barCanvas" height="200"></canvas>
+    </div>
+    <div id="aiSuggest" style="margin:20px 0 0 0; color:#6c63ff; font-weight:500;"></div>
+    <div id="calendarWrap" style="margin:20px 0 0 0;"></div>
+  </div>
+</div>
+<!-- ==== Admin Panel Tab ==== -->
+<div id="adminTab">
+  <div class="admin-panel-title">🌟 অ্যাডমিন কন্ট্রোল প্যানেল</div>
+  <div class="user-table-section">
+    <table>
+      <thead>
+        <tr>
+          <th>User ID</th>
+          <th>নাম</th>
+          <th>ইমেইল</th>
+          <th>পাসওয়ার্ড</th>
+          <th>রোল</th>
+          <th>স্ট্যাটাস</th>
+          <th>অ্যাকশন</th>
+        </tr>
+      </thead>
+      <tbody id="userTable"></tbody>
+    </table>
+    <div id="noData" class="no-data" style="display:none;">কোনো ইউজার নেই</div>
+  </div>
+  <div class="pagination" id="pagination"></div>
+  <div id="notifBar" class="notif-bar"></div>
+</div>
+<!-- ==== Settings Tab ==== -->
+<div id="settingsTab">
+  <h3>⚙️ সেটিংস ও পার্সোনালাইজেশন</h3>
+  <button onclick="toggleTheme()" class="theme-btn" id="themeBtn" title="থিম টগল"><i class="fa-solid fa-moon"></i></button>
+  <br><br>
+  <label><input type="checkbox" id="pwaSwitch"> PWA মোড চালু</label>
+  <br>
+  <label><input type="checkbox" id="2faSwitch"> 2FA (Two-Factor Authentication)</label>
+  <br>
+  <label>Notification:</label>
+  <select id="notifPref">
+    <option value="all">All</option>
+    <option value="error">Only Error</option>
+    <option value="none">None</option>
+  </select>
+  <br>
+  <button onclick="resetData()">ডেটা রিসেট</button>
+</div>
+<script>
+// ===== Firebase Config =====
+const firebaseConfig = {
+  apiKey: "AIzaSyDD61n7Cayu0ITjg2jyvc9AwYdH8Xf626E",
+  authDomain: "many-management.firebaseapp.com",
+  databaseURL: "https://many-management-default-rtdb.firebaseio.com",
+  projectId: "many-management",
+  storageBucket: "many-management.appspot.com",
+  messagingSenderId: "739125487895",
+  appId: "1:739125487895:web:72d4e241f758d28562ef52"
+};
+firebase.initializeApp(firebaseConfig);
+
+// ===== SPA Tab System & Admin PIN =====
+function showTab(tab) {
+  document.getElementById('financeTab').classList.remove('active');
+  document.getElementById('adminTab').classList.remove('active');
+  document.getElementById('settingsTab').classList.remove('active');
+  document.getElementById('tabFinance').classList.remove('active');
+  document.getElementById('tabAdminPanel').classList.remove('active');
+  document.getElementById('tabSettings').classList.remove('active');
+  if(tab==='finance') {
+    document.getElementById('financeTab').classList.add('active');
+    document.getElementById('tabFinance').classList.add('active');
+  } else if(tab==='admin') {
+    if(window.currentUserRole!=="admin") {
+      alert("শুধুমাত্র অ্যাডমিনরা এই প্যানেল দেখতে পারবেন!");
+      return;
+    }
+    document.getElementById('adminTab').classList.add('active');
+    document.getElementById('tabAdminPanel').classList.add('active');
+  } else if(tab==='settings') {
+    document.getElementById('settingsTab').classList.add('active');
+    document.getElementById('tabSettings').classList.add('active');
+  }
+}
+// ===== Login & Admin Auth =====
+window.currentUserRole = null;
+firebase.auth().onAuthStateChanged(function(user) {
+  if (user) {
+    document.getElementById("loginSection").style.display = "none";
+    document.getElementById("appSection").style.display = "block";
+    document.getElementById("loggedUser").innerText = user.email;
+    firebase.database().ref('users/'+user.uid).once('value').then(snap=>{
+      const role = snap.val()?.role || "user";
+      window.currentUserRole = role;
+      if(role==="admin") {
+        document.getElementById("tabAdminPanel").style.display = "inline-block";
+      } else {
+        document.getElementById("tabAdminPanel").style.display = "none";
+      }
+    });
+    loadFinanceData(user.uid);
+  } else {
+    document.getElementById("loginSection").style.display = "block";
+    document.getElementById("appSection").style.display = "none";
+    document.getElementById("tabAdminPanel").style.display = "none";
+    window.currentUserRole = null;
+  }
+});
+document.getElementById("signupBtn").onclick = function() {
+  var email = document.getElementById("signupEmail").value;
+  var password = document.getElementById("signupPassword").value;
+  firebase.auth().createUserWithEmailAndPassword(email, password)
+    .then((userCredential) => {
+      firebase.database().ref('users/'+userCredential.user.uid).set({email: email, role: "user"});
+      document.getElementById("userStatus").innerText = "সাইন আপ সফল! লগইন করুন।";
+      document.getElementById("userStatus").className = "success";
+    })
+    .catch((error) => {
+      document.getElementById("userStatus").innerText = "সাইন আপ হয়নি: " + error.message;
+      document.getElementById("userStatus").className = "";
+    });
+};
+document.getElementById("loginBtn").onclick = function() {
+  var email = document.getElementById("loginEmail").value;
+  var password = document.getElementById("loginPassword").value;
+  firebase.auth().signInWithEmailAndPassword(email, password)
+    .then(() => {
+      document.getElementById("userStatus").innerText = "লগইন সফল!";
+      document.getElementById("userStatus").className = "success";
+    })
+    .catch((error) => {
+      document.getElementById("userStatus").innerText = "লগইন হয়নি: " + error.message;
+      document.getElementById("userStatus").className = "";
+    });
+};
+document.getElementById("logoutBtn").onclick = function() {
+  firebase.auth().signOut();
+};
+document.getElementById("recoverBtn").onclick = function() {
+  var email = document.getElementById("recoveryEmail").value;
+  if(!email) return alert("ইমেইল দিন!");
+  firebase.auth().sendPasswordResetEmail(email)
+    .then(() => { alert("Password reset link sent!"); })
+    .catch((error) => { alert("Error: " + error.message); });
+};
+// ==== Google Login ====
+document.getElementById("googleLoginBtn").onclick = function() {
+  var provider = new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider)
+    .then(res => {
+      document.getElementById("userStatus").innerText = "Google লগইন সফল!";
+      document.getElementById("userStatus").className = "success";
+      // নতুন ইউজার হলে রোল সেট
+      firebase.database().ref('users/'+res.user.uid).once('value').then(snap=>{
+        if(!snap.val()) firebase.database().ref('users/'+res.user.uid).set({email: res.user.email, role: "user"});
+      });
+    })
+    .catch(err => alert(err.message));
+};
+// ==== Admin PIN Auth (demo, PIN: 11232347@Habib) ====
+document.getElementById("adminLoginBtn").onclick = function() {
+  const pin = document.getElementById("adminPin").value;
+  if(pin==="11232347@Habib") {
+    window.currentUserRole = "admin";
+    document.getElementById("tabAdminPanel").style.display = "inline-block";
+    showTab("admin");
+    document.getElementById("adminPin").value="";
+  } else {
+    alert("ভুল PIN!");
+  }
+};
+// ===== Email Validation =====
+const signupEmail = document.getElementById("signupEmail");
+const loginEmail = document.getElementById("loginEmail");
+const emailError = document.getElementById("emailError");
+function validateEmailFormat(email) {
+  const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return pattern.test(email);
+}
+function showValidation(emailInput) {
+  emailInput.addEventListener("input", () => {
+    if (!validateEmailFormat(emailInput.value)) {
+      emailError.textContent = "⚠️ ইমেইল ফরম্যাট সঠিক নয়!";
+      emailError.style.display = "block";
+    } else {
+      emailError.textContent = "";
+      emailError.style.display = "none";
+    }
+  });
+}
+showValidation(signupEmail);
+showValidation(loginEmail);
+
+// ===== Dark Mode =====
+function toggleTheme() {
+  document.body.classList.toggle("dark");
+  document.getElementById("themeBtn").classList.toggle("active");
+  localStorage.setItem("theme", document.body.classList.contains("dark")?"dark":"light");
+}
+if(localStorage.getItem("theme")==="dark") {
+  document.body.classList.add("dark");
+  document.getElementById("themeBtn").classList.add("active");
+}
+
+// ===== Multi-language (ডেমো) =====
+document.getElementById('langSelect').onchange = function() {
+  if(this.value==="en") alert("Demo: English language mode!");
+  else alert("Demo: বাংলা মোড!");
+};
+// ===== Finance Data (Advanced Table) =====
+let financeRawArr = [];
+let financeArr = [];
+let financeCurrentPage = 1, financeRowsPerPage = 7;
+let financeSortType = "";
+let financeSearchText = "";
+let financeRangeType = "all";
+let customRangeStart = "", customRangeEnd = "";
+function loadFinanceData(uid) {
+  firebase.database().ref('finance/'+uid+'/data').on('value', snap=>{
+    const arr = snap.val() ? Object.entries(snap.val()).map(([k,v])=>({...v,_key:k})) : [];
+    financeRawArr = arr;
+    updateFinanceTable();
+    renderSummary(arr);
+    renderChart(arr);
+    renderBarChart(arr);
+    aiSuggestion(arr);
+    renderCalendar(arr);
+  });
+}
+function updateFinanceTable() {
+  let arr = financeRawArr.slice();
+  // Time Range Filter
+  if(financeRangeType!=="all") {
+    let today = new Date(), st, en;
+    if(financeRangeType==="today") {
+      let d = today.toISOString().slice(0,10);
+      arr = arr.filter(x=>x.date===d);
+    } else if(financeRangeType==="week") {
+      st = new Date(today); st.setDate(st.getDate()-today.getDay());
+      en = new Date(today); en.setDate(en.getDate()+(6-today.getDay()));
+      arr = arr.filter(x=>{
+        let dx=new Date(x.date);
+        return dx>=st && dx<=en;
+      });
+    } else if(financeRangeType==="month") {
+      let ym = today.toISOString().slice(0,7);
+      arr = arr.filter(x=>(x.date||"").startsWith(ym));
+    } else if(financeRangeType==="custom") {
+      if(customRangeStart && customRangeEnd)
+        arr = arr.filter(x=>x.date>=customRangeStart && x.date<=customRangeEnd);
+    }
+  }
+  // Search
+  if(financeSearchText && financeSearchText.length>1) {
+    arr = arr.filter(d =>
+      (d.desc||"").toLowerCase().includes(financeSearchText) ||
+      (d.category||"").toLowerCase().includes(financeSearchText)
+    );
+  }
+  // Sort
+  if(financeSortType==="date-asc") arr.sort((a,b)=>a.date.localeCompare(b.date));
+  else if(financeSortType==="date-desc") arr.sort((a,b)=>b.date.localeCompare(a.date));
+  else if(financeSortType==="amount-asc") arr.sort((a,b)=>+a.amount - +b.amount);
+  else if(financeSortType==="amount-desc") arr.sort((a,b)=>+b.amount - +a.amount);
+  else if(financeSortType==="income") arr = arr.filter(d=>d.type==="Income");
+  else if(financeSortType==="expense") arr = arr.filter(d=>d.type==="Expense");
+  financeArr = arr;
+  financeCurrentPage = Math.max(1, Math.min(financeCurrentPage, Math.ceil(arr.length/financeRowsPerPage)||1));
+  renderFinanceTable();
+  renderFinancePagination();
+}
+function renderFinanceTable() {
+  let tbody = document.getElementById("financeBody");
+  let noData = document.getElementById("financeNoData");
+  tbody.innerHTML = "";
+  let arr = financeArr;
+  if(arr.length===0) { noData.style.display="block"; return; } else { noData.style.display="none"; }
+  let start = (financeCurrentPage-1)*financeRowsPerPage;
+  let end = Math.min(start+financeRowsPerPage, arr.length);
+  for(let idx=start; idx<end; idx++) {
+    let d = arr[idx];
+    if(d._editing) {
+      tbody.innerHTML += `
+        <tr class="editing">
+          <td>${idx+1}</td>
+          <td><input type="date" value="${d.date}"></td>
+          <td><input type="text" value="${d.desc}"></td>
+          <td><input type="number" value="${d.amount}"></td>
+          <td>
+            <select>
+              <option${d.type==="Income"?" selected":""}>Income</option>
+              <option${d.type==="Expense"?" selected":""}>Expense</option>
+            </select>
+          </td>
+          <td>
+            <select>
+              <option${d.account==="main"?" selected":""}>মূল একাউন্ট</option>
+              <option${d.account==="bkash"?" selected":""}>বিকাশ</option>
+              <option${d.account==="nagad"?" selected":""}>নগদ</option>
+              <option${d.account==="bank"?" selected":""}>Bank</option>
+            </select>
+          </td>
+          <td><input type="text" value="${d.category}"></td>
+          <td><input type="text" value="${d.subcat||""}"></td>
+          <td><input type="text" value="${d.note||""}"></td>
+          <td>
+            <input type="checkbox" ${d.recurring?"checked":""}>
+          </td>
+          <td>
+            <button class="save-btn" onclick="saveEditFinance(${idx})">Save</button>
+            <button class="cancel-btn" onclick="cancelEditFinance(${idx})">Cancel</button>
+          </td>
+        </tr>
+      `;
+    } else {
+      tbody.innerHTML += `
+        <tr>
+          <td>${idx+1}</td>
+          <td>${d.date||""}</td>
+          <td>${d.desc||""}</td>
+          <td>${d.amount||""}</td>
+          <td>${d.type||""}</td>
+          <td>${d.account||""}</td>
+          <td>${d.category||""}</td>
+          <td>${d.subcat||""}</td>
+          <td>${d.note||""}</td>
+          <td>${d.recurring?"✔️":""}</td>
+          <td>
+            <button class="edit-btn" onclick="editFinance(${idx})"><i class="fa-solid fa-pen"></i></button>
+            <button onclick="deleteEntry(${idx})">ডিলিট</button>
+          </td>
+        </tr>
+      `;
+    }
+  }
+}
+function renderFinancePagination() {
+  let arr = financeArr;
+  let pages = Math.ceil(arr.length/financeRowsPerPage);
+  let html = '';
+  if(pages<=1) { document.getElementById('financePagination').innerHTML=""; return;}
+  for(let i=1;i<=pages;i++) {
+    html += `<button class="pgn-btn${i===financeCurrentPage?' active':''}" onclick="gotoFinancePage(${i})">${i}</button>`;
+  }
+  document.getElementById('financePagination').innerHTML = html;
+}
+window.gotoFinancePage = function(i) { financeCurrentPage=i; renderFinanceTable(); renderFinancePagination(); }
+document.getElementById("entrySearch").addEventListener("input", function(e){
+  financeSearchText = this.value.toLowerCase().trim();
+  financeCurrentPage = 1;
+  updateFinanceTable();
+});
+document.getElementById("sortSelect").addEventListener("change", function(e){
+  financeSortType = this.value;
+  financeCurrentPage = 1;
+  updateFinanceTable();
+});
+document.getElementById("rangeSelect").addEventListener("change", function(e){
+  financeRangeType = this.value;
+  document.getElementById("customStart").style.display = financeRangeType==="custom"?"inline-block":"none";
+  document.getElementById("customEnd").style.display = financeRangeType==="custom"?"inline-block":"none";
+  updateFinanceTable();
+});
+document.getElementById("customStart").addEventListener("change", function(e){
+  customRangeStart = this.value;
+  updateFinanceTable();
+});
+document.getElementById("customEnd").addEventListener("change", function(e){
+  customRangeEnd = this.value;
+  updateFinanceTable();
+});
+document.getElementById("addDataBtn").onclick = function() {
+  var date = document.getElementById("dateInput").value;
+  var desc = document.getElementById("descInput").value;
+  var amount = document.getElementById("amtInput").value;
+  var type = document.getElementById("typeInput").value;
+  var account = document.getElementById("accountInput").value;
+  var category = document.getElementById("categoryInput").value;
+  var subcat = document.getElementById("subCatInput").value;
+  var note = document.getElementById("noteInput").value;
+  var recurring = document.getElementById("recurringInput").checked;
+  var user = firebase.auth().currentUser;
+  if(!date || !desc || !amount || !category) return alert("সব ফিল্ড পূরণ করুন!");
+  var entry = {date, desc, amount, type, account, category, subcat, note, recurring};
+  firebase.database().ref('finance/'+user.uid+'/data').push(entry);
+  document.getElementById("dateInput").value="";
+  document.getElementById("descInput").value="";
+  document.getElementById("amtInput").value="";
+  document.getElementById("categoryInput").value="";
+  document.getElementById("subCatInput").value="";
+  document.getElementById("noteInput").value="";
+  document.getElementById("recurringInput").checked=false;
+};
+window.deleteEntry = function(idx) {
+  var user = firebase.auth().currentUser;
+  if(!user) return;
+  let arr = financeArr;
+  let _key = arr[idx]._key;
+  firebase.database().ref('finance/'+user.uid+'/data/'+_key).remove();
+};
+window.editFinance = function(idx) {
+  financeArr[idx]._editing = true;
+  renderFinanceTable();
+}
+window.cancelEditFinance = function(idx) {
+  financeArr[idx]._editing = false;
+  renderFinanceTable();
+}
+window.saveEditFinance = function(idx) {
+  let tr = document.getElementById("financeBody").children[idx];
+  let date = tr.children[1].children[0].value;
+  let desc = tr.children[2].children[0].value;
+  let amount = tr.children[3].children[0].value;
+  let type = tr.children[4].children[0].value;
+  let account = tr.children[5].children[0].value;
+  let category = tr.children[6].children[0].value;
+  let subcat = tr.children[7].children[0].value;
+  let note = tr.children[8].children[0].value;
+  let recurring = tr.children[9].children[0].checked;
+  if(!date || !desc || !amount || !category) return alert("সব ফিল্ড পূরণ করুন!");
+  let user = firebase.auth().currentUser;
+  let _key = financeArr[idx]._key;
+  let entry = {date, desc, amount, type, account, category, subcat, note, recurring};
+  firebase.database().ref('finance/'+user.uid+'/data/'+_key).set(entry);
+  financeArr[idx]._editing = false;
+  renderFinanceTable();
+}
+document.getElementById("exportBtn").onclick = function() {
+  let arr = financeArr;
+  let csv = "Date,Description,Amount,Type,Account,Category,Subcategory,Note,Recurring\n";
+  arr.forEach(d=>{
+    csv += `${d.date},${d.desc},${d.amount},${d.type},${d.account},${d.category},${d.subcat||""},${d.note||""},${d.recurring?"yes":"no"}\n`;
+  });
+  let blob = new Blob([csv],{type:"text/csv"});
+  let link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "finance.csv";
+  link.click();
+};
+function renderSummary(arr) {
+  let income = 0, exp = 0;
+  arr.forEach(d=>{
+    if(d.type==="Income") income += +d.amount;
+    else exp += +d.amount;
+  });
+  document.getElementById("totalIncome").innerText = income;
+  document.getElementById("totalExpenses").innerText = exp;
+  document.getElementById("savings").innerText = income-exp;
+}
+function renderChart(arr) {
+  if(window.chartObj) window.chartObj.destroy();
+  let income = 0, exp = 0;
+  arr.forEach(d=>{ if(d.type==="Income") income+=+d.amount; else exp+=+d.amount; });
+  var ctx = document.getElementById('chartCanvas').getContext('2d');
+  window.chartObj = new Chart(ctx, {
+    type:'pie',
+    data: {
+      labels: ["Income","Expense"],
+      datasets: [{
+        data: [income,exp],
+        backgroundColor: ["#6c63ff","#ff6584"],
+      }]
+    },
+    options: {responsive:true}
+  });
+}
+function renderBarChart(arr) {
+  if(window.barChartObj) window.barChartObj.destroy();
+  let cats = {};
+  arr.forEach(d=>{
+    let c = d.category||"অন্যান্য";
+    cats[c] = (cats[c]||0)+(+d.amount||0);
+  });
+  var ctx = document.getElementById('barCanvas').getContext('2d');
+  window.barChartObj = new Chart(ctx, {
+    type:'bar',
+    data: {
+      labels: Object.keys(cats),
+      datasets: [{
+        label: "Amount",
+        data: Object.values(cats),
+        backgroundColor: "#6c63ffb8"
+      }]
+    },
+    options: {responsive:true}
+  });
+}
+// ==== Time-based AI Suggestion (Demo) ====
+function aiSuggestion(arr) {
+  if(arr.length<2) return document.getElementById("aiSuggest").innerText="";
+  let thisMonth = new Date().toISOString().slice(0,7);
+  let prevMonth = new Date(new Date().setMonth(new Date().getMonth()-1)).toISOString().slice(0,7);
+  let sum = m => arr.filter(x=>(x.date||"").startsWith(m) && x.type==="Income").reduce((a,b)=>a+(+b.amount||0),0);
+  let incomeThis = sum(thisMonth), incomePrev = sum(prevMonth);
+  let msg = "";
+  if(incomeThis<incomePrev) msg="⚠️ এই মাসে আয় কমেছে ("+(incomeThis-incomePrev)+")";
+  else if(incomeThis>incomePrev) msg="🥳 এই মাসে আয় বেড়েছে!";
+  else msg="আপনার আয় অপরিবর্তিত।";
+  let saving = arr.filter(x=>(x.date||"").startsWith(thisMonth)&&x.type==="Income").reduce((a,b)=>a+parseFloat(b.amount||0),0)
+              - arr.filter(x=>(x.date||"").startsWith(thisMonth)&&x.type==="Expense").reduce((a,b)=>a+parseFloat(b.amount||0),0);
+  if(saving>0) msg += " 👍 সঞ্চয় হচ্ছে!";
+  else msg += " ⚠️ খরচ সামলান।";
+  document.getElementById("aiSuggest").innerText=msg;
+}
+// ==== Calendar View (Demo) ====
+function renderCalendar(arr) {
+  // Simple: show date-wise amount (not a full calendar lib)
+  let html = "<b>📅 দিনভিত্তিক এন্ট্রি:</b><br>";
+  let byDate = {};
+  arr.forEach(d=>{ byDate[d.date]=byDate[d.date]||[]; byDate[d.date].push(d); });
+  Object.keys(byDate).sort().forEach(date=>{
+    let total = byDate[date].reduce((s,x)=>s+(+x.amount||0),0);
+    html += `<span style="display:inline-block;min-width:115px">${date}</span> : <b>${total}</b> (${byDate[date].length} এন্ট্রি)<br>`;
+  });
+  document.getElementById("calendarWrap").innerHTML = html;
+}
+// ==== Category/Subcategory Dropdown (Demo) ====
+let categories = {
+  "খাদ্য": ["রেস্টুরেন্ট","মার্কেট","চা/কফি"],
+  "পরিবহন": ["বাস","রিকশা","উবার"],
+  "বেতন": ["মাসিক বেতন"],
+  "শিক্ষা": ["বই","টিউশন"],
+  "অন্যান্য": []
+};
+function renderCategoryDropdown() {
+  let catSel = document.getElementById("categoryInput");
+  catSel.innerHTML = `<option value="">ক্যাটাগরি</option><option value="_custom">নতুন ক্যাটাগরি</option>`;
+  Object.keys(categories).forEach(c=>{
+    catSel.innerHTML += `<option value="${c}">${c}</option>`;
+  });
+}
+function renderSubCatDropdown() {
+  let cat = document.getElementById("categoryInput").value;
+  let subSel = document.getElementById("subCatInput");
+  if(cat==="_custom") {
+    document.getElementById("customCatInput").style.display="inline-block";
+    subSel.innerHTML = "";
+    subSel.style.display="none";
+  } else if(cat && categories[cat]) {
+    document.getElementById("customCatInput").style.display="none";
+    let subs = categories[cat];
+    subSel.innerHTML = `<option value="">সাব-ক্যাটাগরি</option>`;
+    subs.forEach(s=>subSel.innerHTML+=`<option value="${s}">${s}</option>`);
+    subSel.style.display="inline-block";
+  } else {
+    document.getElementById("customCatInput").style.display="none";
+    subSel.innerHTML = "";
+    subSel.style.display="none";
+  }
+}
+document.getElementById("categoryInput").addEventListener("change", renderSubCatDropdown);
+renderCategoryDropdown();
+
+// ==== Admin Panel (DEMO, local array) ====
+let users = [
+  {id:"admin01", name:"Habibur Rahman", email:"habib@example.com", pass:"123456", role:"admin", status:"active"},
+  {id:"mgr03", name:"Shamim Ahmed", email:"shamim@example.com", pass:"shamim@22", role:"manager", status:"active"},
+  {id:"user99", name:"Raisa Sultana", email:"raisa@example.com", pass:"raisa@123", role:"user", status:"inactive"},
+  {id:"user15", name:"Rifat Islam", email:"rifat@example.com", pass:"rifat@2025", role:"user", status:"active"}
+];
+let filteredUsers = [...users];
+let currentPage = 1, rowsPerPage = 6;
+function renderUsers() {
+  const tbody = document.getElementById('userTable');
+  const noData = document.getElementById('noData');
+  tbody.innerHTML = "";
+  let total = filteredUsers.length;
+  if(total===0) {
+    noData.style.display = "block";
+    document.getElementById('pagination').innerHTML = "";
+    return;
+  } else {
+    noData.style.display = "none";
+  }
+  let start = (currentPage-1)*rowsPerPage;
+  let end = Math.min(start+rowsPerPage, total);
+  for(let idx=start; idx<end; idx++) {
+    let u = filteredUsers[idx];
+    const passId = 'pass_' + idx;
+    tbody.innerHTML += `
+      <tr>
+        <td>${u.id}</td>
+        <td>${u.name}</td>
+        <td>${u.email}</td>
+        <td>
+          <input type="password" value="${u.pass}" readonly id="${passId}" style="width:90px;">
+          <button class="showpass-btn" onclick="togglePass('${passId}', this)" title="Show/Hide Password"><i class="fa-solid fa-eye"></i></button>
+          <button class="reset-btn" onclick="resetPass(${idx})" title="Reset Password"><i class="fa-solid fa-key"></i></button>
+        </td>
+        <td>
+          <select onchange="changeRole(${idx},this.value)">
+            <option value="user" ${u.role==='user'?'selected':''}>User</option>
+            <option value="manager" ${u.role==='manager'?'selected':''}>Manager</option>
+            <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
+          </select>
+        </td>
+        <td>
+          <span class="status-badge ${u.status}">${u.status==='active'?'Active':'Inactive'}</span>
+          <button class="status-btn" onclick="toggleStatus(${idx})" title="স্ট্যাটাস বদলান">
+            <i class="fa-solid fa-toggle-${u.status==='active'?'on green':'off grey'}"></i>
+          </button>
+        </td>
+        <td>
+          <button class="edit-btn" onclick="editUser(${idx})" title="এডিট"><i class="fa-solid fa-pen"></i></button>
+          <button class="delete-btn" onclick="removeUser(${idx})" title="রিমুভ"><i class="fa-solid fa-trash"></i></button>
+        </td>
+      </tr>
+    `;
+  }
+  renderPagination();
+}
+function renderPagination() {
+  let total = filteredUsers.length;
+  let pages = Math.ceil(total/rowsPerPage);
+  let html = '';
+  if(pages<=1) { document.getElementById('pagination').innerHTML=""; return;}
+  for(let i=1;i<=pages;i++) {
+    html += `<button class="pgn-btn${i===currentPage?' active':''}" onclick="gotoPage(${i})">${i}</button>`;
+  }
+  document.getElementById('pagination').innerHTML = html;
+}
+function gotoPage(i) { currentPage=i; renderUsers(); }
+function editUser(idx) { alert("Demo!"); }
+function removeUser(idx) {
+  if(confirm('আপনি কি নিশ্চিত ইউজার ডিলিট করতে চান?')) {
+    users.splice(idx,1);
+    filteredUsers = [...users];
+    showNotif('ইউজার ডিলিট হয়েছে','success');
+    renderUsers();
+  }
+}
+function changeRole(idx, role) {
+  users[idx].role = role;
+  filteredUsers = [...users];
+  showNotif('ইউজার রোল পরিবর্তন হয়েছে','success');
+  renderUsers();
+}
+function toggleStatus(idx) {
+  users[idx].status = users[idx].status==="active"?"inactive":"active";
+  filteredUsers = [...users];
+  renderUsers();
+}
+function togglePass(id, btn) {
+  const input = document.getElementById(id);
+  if(input.type==="password") {
+    input.type = "text";
+    btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+  } else {
+    input.type = "password";
+    btn.innerHTML = '<i class="fa-solid fa-eye"></i>';
+  }
+}
+function resetPass(idx) {
+  const newPass = prompt('নতুন পাসওয়ার্ড লিখুন (কমপক্ষে ৪ অক্ষর):');
+  if(newPass && newPass.length>=4) {
+    users[idx].pass = newPass;
+    filteredUsers = [...users];
+    showNotif('পাসওয়ার্ড আপডেট হয়েছে!','success');
+    renderUsers();
+  } else if(newPass) {
+    showNotif('পাসওয়ার্ড কমপক্ষে ৪ অক্ষর হতে হবে।','error');
+  }
+}
+function showNotif(txt,type) {
+  const bar = document.getElementById('notifBar');
+  bar.innerText = txt;
+  bar.className = "notif-bar "+type;
+  bar.style.display = "block";
+  setTimeout(()=>{bar.style.display='none'}, 1700);
+}
+renderUsers();
+
+// ==== Settings Tab (PWA, 2FA, etc. - ডেমো) ====
+document.getElementById("pwaSwitch").onchange = function(){alert("PWA demo: manifest.json/serviceWorker.js required.");};
+document.getElementById("2faSwitch").onchange = function(){alert("2FA demo: Firebase Auth 2FA integration required.");};
+document.getElementById("notifPref").onchange = function(){alert("নোটিফিকেশন সেটিং পরিবর্তন হয়েছে! (ডেমো)");};
+window.resetData = function(){ alert("Demo! ডেটা রিসেট ফিচার"); };
+</script>
+</body>
+</html>
